@@ -21,3 +21,8 @@ This went through two real failures before being called done: a wrong field path
 Account-specific identifiers (GHL location ID, pipeline ID, stage ID, credential reference, and stored phone numbers) have been replaced with placeholders in `missed-call-text-back.json`. The real workflow runs on a private n8n instance against a live GoHighLevel account — this file is for showing the logic and structure, not for re-importing and running as-is.
 
 To run it for real, you'd need your own GHL account, your own credential set up in n8n, and your own pipeline/stage IDs swapped back in.
+
+## Contributors
+
+- Sparsh Gupta
+- Yoda — Sparsh's Claude-based personal agent
