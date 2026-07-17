@@ -1,0 +1,2008 @@
+{
+  "updatedAt": "2026-07-07T23:57:51.096Z",
+  "createdAt": "2026-07-06T16:25:18.613Z",
+  "id": "<WORKFLOW_ID>",
+  "name": "Missed Call Text-Back \u2014 Pressure Washing",
+  "description": "Missed-call text-back automation for local service businesses. IDs replaced with placeholders for public sharing \u2014 the real workflow runs on a private n8n instance with real GHL account IDs.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "Missed_Call_Webhook",
+      "name": "Missed Call Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "missed-call-pressure-washing",
+        "responseMode": "onReceived",
+        "responseData": "success",
+        "options": {}
+      },
+      "webhookId": "c4976e91-a2e9-4d8a-b591-cbb1f16a84e2"
+    },
+    {
+      "id": "Filter_Missed_or_No-Answer_Only",
+      "name": "Filter: Missed or No-Answer Only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        -980,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{$json.body.customData.callStatus}}",
+              "rightValue": "missed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": false
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{$json.body.customData.callStatus}}",
+              "rightValue": "no-answer",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": false
+              }
+            },
+            {
+              "id": "c3",
+              "leftValue": "={{$json.body.customData.callStatus}}",
+              "rightValue": "no-show",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": false
+              }
+            },
+            {
+              "id": "c4",
+              "leftValue": "={{$json.body.customData.callStatus}}",
+              "rightValue": "voicemail",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "caseSensitive": false
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Wait_30s",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -760,
+        0
+      ],
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "Dedup_Check",
+      "name": "Dedup Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -540,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.textedNumbers) staticData.textedNumbers = {};\n\nconst phone = $json.body.phone;\nconst now = Date.now();\nconst twoHoursMs = 2 * 60 * 60 * 1000;\nconst lastTexted = staticData.textedNumbers[phone];\nconst isDuplicate = Boolean(lastTexted) && (now - lastTexted) < twoHoursMs;\n\nreturn [{\n  json: {\n    ...$json.body,\n    isDuplicate,\n    lastTextedAt: lastTexted || null,\n    hoursSinceLastText: lastTexted ? Math.round((now - lastTexted) / 3600000 * 100) / 100 : null\n  }\n}];"
+      }
+    },
+    {
+      "id": "Is_Duplicate_within_2h",
+      "name": "Is Duplicate? (within 2h)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -320,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{$json.isDuplicate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Stopped_Duplicate_Within_2h",
+      "name": "Stopped: Duplicate Within 2h",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        150
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "GHL_Lookup_Contact",
+      "name": "GHL: Lookup Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -100,
+        -100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://services.leadconnectorhq.com/contacts/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "locationId",
+              "value": "<GHL_LOCATION_ID>"
+            },
+            {
+              "name": "query",
+              "value": "={{$json.phone}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Contact_Exists",
+      "name": "Contact Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        140,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "e1",
+              "leftValue": "={{$json.contacts?.length || 0}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "GHL_Create_Contact_New_Lead",
+      "name": "GHL: Create Contact (New Lead)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        380,
+        -280
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/contacts/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: \"<GHL_LOCATION_ID>\", phone: $('Dedup Check').item.json.phone, tags: [\"missed-call-lead\"], source: \"missed-call-textback\" }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "GHL_Tag_Existing_Contact_Repeat",
+      "name": "GHL: Tag Existing Contact (Repeat)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        380,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + $json.contacts[0].id + '/tags' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tags: [\"missed-call-repeat\"] }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Compose_Message_New_Lead",
+      "name": "Compose Message: New Lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        620,
+        -280
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "contactId",
+              "type": "string",
+              "value": "={{$json.contact ? $json.contact.id : $json.id}}"
+            },
+            {
+              "id": "m2",
+              "name": "phone",
+              "type": "string",
+              "value": "={{$('Dedup Check').item.json.phone}}"
+            },
+            {
+              "id": "m3",
+              "name": "isNewLead",
+              "type": "boolean",
+              "value": true
+            },
+            {
+              "id": "m4",
+              "name": "message",
+              "type": "string",
+              "value": "Hey, this is [Business Name] \u2014 sorry we missed your call! Reply here or call us back and we'll get you a quote. Reply STOP to opt out."
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Compose_Message_Repeat_Customer",
+      "name": "Compose Message: Repeat Customer",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        620,
+        -80
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "contactId",
+              "type": "string",
+              "value": "={{$('GHL: Lookup Contact').item.json.contacts[0].id}}"
+            },
+            {
+              "id": "r2",
+              "name": "phone",
+              "type": "string",
+              "value": "={{$('Dedup Check').item.json.phone}}"
+            },
+            {
+              "id": "r3",
+              "name": "isNewLead",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "id": "r4",
+              "name": "message",
+              "type": "string",
+              "value": "Hey, sorry we missed you! What do you need \u2014 we'll get right back to you."
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "GHL_Send_SMS",
+      "name": "GHL: Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        860,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/conversations/messages",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: \"SMS\", contactId: $json.contactId, message: $json.message }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Mark_Texted_Update_Dedup_Store",
+      "name": "Mark Texted (Update Dedup Store)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData(\"global\");\nif (!staticData.textedNumbers) staticData.textedNumbers = {};\n\nlet phone, contactId;\ntry { phone = $(\"Compose Message: New Lead\").item.json.phone; contactId = $(\"Compose Message: New Lead\").item.json.contactId; } catch (e) {}\nif (!phone) {\n  try { phone = $(\"Compose Message: Repeat Customer\").item.json.phone; contactId = $(\"Compose Message: Repeat Customer\").item.json.contactId; } catch (e) {}\n}\n\nstaticData.textedNumbers[phone] = Date.now();\nreturn [{ json: { ...$json, phone, contactId, textedAt: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "GHL_Find_Opportunity",
+      "name": "GHL: Find Opportunity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1340,
+        -280
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://services.leadconnectorhq.com/opportunities/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "location_id",
+              "value": "<GHL_LOCATION_ID>"
+            },
+            {
+              "name": "contact_id",
+              "value": "={{$json.contactId}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Opportunity_Exists",
+      "name": "Opportunity Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1580,
+        -280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "o1",
+              "leftValue": "={{$json.opportunities?.length || 0}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "GHL_Create_Opportunity_Auto-texted",
+      "name": "GHL: Create Opportunity (Auto-texted)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1820,
+        -380
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/opportunities/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ locationId: \"<GHL_LOCATION_ID>\", pipelineId: \"<GHL_PIPELINE_ID>\", pipelineStageId: \"<GHL_STAGE_ID>\", name: \"Missed Call - \" + $('Mark Texted (Update Dedup Store)').item.json.phone, status: \"open\", contactId: $('Mark Texted (Update Dedup Store)').item.json.contactId }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "GHL_Move_Stage_to_Auto-texted",
+      "name": "GHL: Move Stage to Auto-texted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1820,
+        -180
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://services.leadconnectorhq.com/opportunities/' + $json.opportunities[0].id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ pipelineStageId: \"<GHL_STAGE_ID>\" }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "End_Auto-texted_Successfully",
+      "name": "End: Auto-texted Successfully",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        -280
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Log_Pipeline_Update_Failed",
+      "name": "Log: Pipeline Update Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "console.log('Pipeline stage update failed (non-fatal - SMS already sent):', JSON.stringify($json));\nreturn [{ json: { ...$json, pipelineUpdateFailed: true } }];"
+      }
+    },
+    {
+      "id": "Log_Failure",
+      "name": "Log Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.failureLog) staticData.failureLog = [];\nconst entry = { at: new Date().toISOString(), data: $json };\nstaticData.failureLog.push(entry);\nconsole.log('Missed-call textback FAILED, logging for manual follow-up:', JSON.stringify(entry));\nreturn [{ json: { ...$json, loggedForManualFollowUp: true } }];"
+      }
+    },
+    {
+      "id": "GHL_Tag_for_Manual_Follow-up",
+      "name": "GHL: Tag for Manual Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + ($json.contactId || ($json.contacts && $json.contacts[0] && $json.contacts[0].id) || 'unknown') + '/tags' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tags: [\"missed-call-send-failed\"] }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "End_Manual_Follow-up_Needed",
+      "name": "End: Manual Follow-up Needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Filtered_Out_Not_a_Missed_Call",
+      "name": "Filtered Out: Not a Missed Call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        200
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Missed Call Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter: Missed or No-Answer Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Missed or No-Answer Only": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Filtered Out: Not a Missed Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate? (within 2h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate? (within 2h)": {
+      "main": [
+        [
+          {
+            "node": "Stopped: Duplicate Within 2h",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GHL: Lookup Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Lookup Contact": {
+      "main": [
+        [
+          {
+            "node": "Contact Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Exists?": {
+      "main": [
+        [
+          {
+            "node": "GHL: Tag Existing Contact (Repeat)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GHL: Create Contact (New Lead)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Create Contact (New Lead)": {
+      "main": [
+        [
+          {
+            "node": "Compose Message: New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Tag Existing Contact (Repeat)": {
+      "main": [
+        [
+          {
+            "node": "Compose Message: Repeat Customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Message: New Lead": {
+      "main": [
+        [
+          {
+            "node": "GHL: Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Message: Repeat Customer": {
+      "main": [
+        [
+          {
+            "node": "GHL: Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Mark Texted (Update Dedup Store)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Texted (Update Dedup Store)": {
+      "main": [
+        [
+          {
+            "node": "GHL: Find Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Find Opportunity": {
+      "main": [
+        [
+          {
+            "node": "Opportunity Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Pipeline Update Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Opportunity Exists?": {
+      "main": [
+        [
+          {
+            "node": "GHL: Move Stage to Auto-texted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GHL: Create Opportunity (Auto-texted)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Move Stage to Auto-texted": {
+      "main": [
+        [
+          {
+            "node": "End: Auto-texted Successfully",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Pipeline Update Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Create Opportunity (Auto-texted)": {
+      "main": [
+        [
+          {
+            "node": "End: Auto-texted Successfully",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Pipeline Update Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Failure": {
+      "main": [
+        [
+          {
+            "node": "GHL: Tag for Manual Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Tag for Manual Follow-up": {
+      "main": [
+        [
+          {
+            "node": "End: Manual Follow-up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "End: Manual Follow-up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {
+    "global": {}
+  },
+  "meta": null,
+  "pinData": null,
+  "versionId": "<VERSION_ID>",
+  "versionCounter": 69,
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-07-07T23:57:51.096Z",
+    "createdAt": "2026-07-07T23:57:51.096Z",
+    "versionId": "e942f9ac-9170-4ee7-a24c-287a399401cc",
+    "workflowId": "IbCCqdqoGWhz1aHf",
+    "nodes": [
+      {
+        "id": "Missed_Call_Webhook",
+        "name": "Missed Call Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -1200,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "missed-call-pressure-washing",
+          "responseMode": "onReceived",
+          "responseData": "success",
+          "options": {}
+        },
+        "webhookId": "c4976e91-a2e9-4d8a-b591-cbb1f16a84e2"
+      },
+      {
+        "id": "Filter_Missed_or_No-Answer_Only",
+        "name": "Filter: Missed or No-Answer Only",
+        "type": "n8n-nodes-base.filter",
+        "typeVersion": 2.3,
+        "position": [
+          -980,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": false,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "combinator": "or",
+            "conditions": [
+              {
+                "id": "c1",
+                "leftValue": "={{$json.body.customData.callStatus}}",
+                "rightValue": "missed",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "caseSensitive": false
+                }
+              },
+              {
+                "id": "c2",
+                "leftValue": "={{$json.body.customData.callStatus}}",
+                "rightValue": "no-answer",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "caseSensitive": false
+                }
+              },
+              {
+                "id": "c3",
+                "leftValue": "={{$json.body.customData.callStatus}}",
+                "rightValue": "no-show",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "caseSensitive": false
+                }
+              },
+              {
+                "id": "c4",
+                "leftValue": "={{$json.body.customData.callStatus}}",
+                "rightValue": "voicemail",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "caseSensitive": false
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "Wait_30s",
+        "name": "Wait 30s",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          -760,
+          0
+        ],
+        "parameters": {
+          "amount": 30,
+          "unit": "seconds"
+        }
+      },
+      {
+        "id": "Dedup_Check",
+        "name": "Dedup Check",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -540,
+          0
+        ],
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.textedNumbers) staticData.textedNumbers = {};\n\nconst phone = $json.body.phone;\nconst now = Date.now();\nconst twoHoursMs = 2 * 60 * 60 * 1000;\nconst lastTexted = staticData.textedNumbers[phone];\nconst isDuplicate = Boolean(lastTexted) && (now - lastTexted) < twoHoursMs;\n\nreturn [{\n  json: {\n    ...$json.body,\n    isDuplicate,\n    lastTextedAt: lastTexted || null,\n    hoursSinceLastText: lastTexted ? Math.round((now - lastTexted) / 3600000 * 100) / 100 : null\n  }\n}];"
+        }
+      },
+      {
+        "id": "Is_Duplicate_within_2h",
+        "name": "Is Duplicate? (within 2h)",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -320,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 2
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "d1",
+                "leftValue": "={{$json.isDuplicate}}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "Stopped_Duplicate_Within_2h",
+        "name": "Stopped: Duplicate Within 2h",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          -100,
+          150
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "GHL_Lookup_Contact",
+        "name": "GHL: Lookup Contact",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          -100,
+          -100
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "https://services.leadconnectorhq.com/contacts/",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "locationId",
+                "value": "<GHL_LOCATION_ID>"
+              },
+              {
+                "name": "query",
+                "value": "={{$json.phone}}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "Contact_Exists",
+        "name": "Contact Exists?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          140,
+          -180
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "e1",
+                "leftValue": "={{$json.contacts?.length || 0}}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "GHL_Create_Contact_New_Lead",
+        "name": "GHL: Create Contact (New Lead)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          380,
+          -280
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://services.leadconnectorhq.com/contacts/",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ locationId: \"<GHL_LOCATION_ID>\", phone: $('Dedup Check').item.json.phone, tags: [\"missed-call-lead\"], source: \"missed-call-textback\" }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "GHL_Tag_Existing_Contact_Repeat",
+        "name": "GHL: Tag Existing Contact (Repeat)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          380,
+          -80
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + $json.contacts[0].id + '/tags' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ tags: [\"missed-call-repeat\"] }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "Compose_Message_New_Lead",
+        "name": "Compose Message: New Lead",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          620,
+          -280
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "m1",
+                "name": "contactId",
+                "type": "string",
+                "value": "={{$json.contact ? $json.contact.id : $json.id}}"
+              },
+              {
+                "id": "m2",
+                "name": "phone",
+                "type": "string",
+                "value": "={{$('Dedup Check').item.json.phone}}"
+              },
+              {
+                "id": "m3",
+                "name": "isNewLead",
+                "type": "boolean",
+                "value": true
+              },
+              {
+                "id": "m4",
+                "name": "message",
+                "type": "string",
+                "value": "Hey, this is [Business Name] \u2014 sorry we missed your call! Reply here or call us back and we'll get you a quote. Reply STOP to opt out."
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "Compose_Message_Repeat_Customer",
+        "name": "Compose Message: Repeat Customer",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          620,
+          -80
+        ],
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "r1",
+                "name": "contactId",
+                "type": "string",
+                "value": "={{$('GHL: Lookup Contact').item.json.contacts[0].id}}"
+              },
+              {
+                "id": "r2",
+                "name": "phone",
+                "type": "string",
+                "value": "={{$('Dedup Check').item.json.phone}}"
+              },
+              {
+                "id": "r3",
+                "name": "isNewLead",
+                "type": "boolean",
+                "value": false
+              },
+              {
+                "id": "r4",
+                "name": "message",
+                "type": "string",
+                "value": "Hey, sorry we missed you! What do you need \u2014 we'll get right back to you."
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "GHL_Send_SMS",
+        "name": "GHL: Send SMS",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          860,
+          -180
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://services.leadconnectorhq.com/conversations/messages",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ type: \"SMS\", contactId: $json.contactId, message: $json.message }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "Mark_Texted_Update_Dedup_Store",
+        "name": "Mark Texted (Update Dedup Store)",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -280
+        ],
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData(\"global\");\nif (!staticData.textedNumbers) staticData.textedNumbers = {};\n\nlet phone, contactId;\ntry { phone = $(\"Compose Message: New Lead\").item.json.phone; contactId = $(\"Compose Message: New Lead\").item.json.contactId; } catch (e) {}\nif (!phone) {\n  try { phone = $(\"Compose Message: Repeat Customer\").item.json.phone; contactId = $(\"Compose Message: Repeat Customer\").item.json.contactId; } catch (e) {}\n}\n\nstaticData.textedNumbers[phone] = Date.now();\nreturn [{ json: { ...$json, phone, contactId, textedAt: new Date().toISOString() } }];"
+        }
+      },
+      {
+        "id": "GHL_Find_Opportunity",
+        "name": "GHL: Find Opportunity",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1340,
+          -280
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "https://services.leadconnectorhq.com/opportunities/search",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "location_id",
+                "value": "<GHL_LOCATION_ID>"
+              },
+              {
+                "name": "contact_id",
+                "value": "={{$json.contactId}}"
+              }
+            ]
+          },
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "Opportunity_Exists",
+        "name": "Opportunity Exists?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1580,
+          -280
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "combinator": "and",
+            "conditions": [
+              {
+                "id": "o1",
+                "leftValue": "={{$json.opportunities?.length || 0}}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "GHL_Create_Opportunity_Auto-texted",
+        "name": "GHL: Create Opportunity (Auto-texted)",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1820,
+          -380
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://services.leadconnectorhq.com/opportunities/",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ locationId: \"<GHL_LOCATION_ID>\", pipelineId: \"<GHL_PIPELINE_ID>\", pipelineStageId: \"<GHL_STAGE_ID>\", name: \"Missed Call - \" + $('Mark Texted (Update Dedup Store)').item.json.phone, status: \"open\", contactId: $('Mark Texted (Update Dedup Store)').item.json.contactId }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "GHL_Move_Stage_to_Auto-texted",
+        "name": "GHL: Move Stage to Auto-texted",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1820,
+          -180
+        ],
+        "parameters": {
+          "method": "PUT",
+          "url": "={{ 'https://services.leadconnectorhq.com/opportunities/' + $json.opportunities[0].id }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ pipelineStageId: \"<GHL_STAGE_ID>\" }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "End_Auto-texted_Successfully",
+        "name": "End: Auto-texted Successfully",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          2060,
+          -280
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "Log_Pipeline_Update_Failed",
+        "name": "Log: Pipeline Update Failed",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          -20
+        ],
+        "parameters": {
+          "jsCode": "console.log('Pipeline stage update failed (non-fatal - SMS already sent):', JSON.stringify($json));\nreturn [{ json: { ...$json, pipelineUpdateFailed: true } }];"
+        }
+      },
+      {
+        "id": "Log_Failure",
+        "name": "Log Failure",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          860,
+          180
+        ],
+        "parameters": {
+          "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.failureLog) staticData.failureLog = [];\nconst entry = { at: new Date().toISOString(), data: $json };\nstaticData.failureLog.push(entry);\nconsole.log('Missed-call textback FAILED, logging for manual follow-up:', JSON.stringify(entry));\nreturn [{ json: { ...$json, loggedForManualFollowUp: true } }];"
+        }
+      },
+      {
+        "id": "GHL_Tag_for_Manual_Follow-up",
+        "name": "GHL: Tag for Manual Follow-up",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1100,
+          180
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + ($json.contactId || ($json.contacts && $json.contacts[0] && $json.contacts[0].id) || 'unknown') + '/tags' }}",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ tags: [\"missed-call-send-failed\"] }) }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Version",
+                "value": "2021-07-28"
+              }
+            ]
+          },
+          "options": {},
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth"
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "<CREDENTIAL_ID>",
+            "name": "GHL API (Yoda)"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "id": "End_Manual_Follow-up_Needed",
+        "name": "End: Manual Follow-up Needed",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1340,
+          180
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "Filtered_Out_Not_a_Missed_Call",
+        "name": "Filtered Out: Not a Missed Call",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          -980,
+          200
+        ],
+        "parameters": {}
+      }
+    ],
+    "connections": {
+      "Missed Call Webhook": {
+        "main": [
+          [
+            {
+              "node": "Filter: Missed or No-Answer Only",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filter: Missed or No-Answer Only": {
+        "main": [
+          [
+            {
+              "node": "Wait 30s",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Filtered Out: Not a Missed Call",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 30s": {
+        "main": [
+          [
+            {
+              "node": "Dedup Check",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Dedup Check": {
+        "main": [
+          [
+            {
+              "node": "Is Duplicate? (within 2h)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Duplicate? (within 2h)": {
+        "main": [
+          [
+            {
+              "node": "Stopped: Duplicate Within 2h",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "GHL: Lookup Contact",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Lookup Contact": {
+        "main": [
+          [
+            {
+              "node": "Contact Exists?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Contact Exists?": {
+        "main": [
+          [
+            {
+              "node": "GHL: Tag Existing Contact (Repeat)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "GHL: Create Contact (New Lead)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Create Contact (New Lead)": {
+        "main": [
+          [
+            {
+              "node": "Compose Message: New Lead",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Tag Existing Contact (Repeat)": {
+        "main": [
+          [
+            {
+              "node": "Compose Message: Repeat Customer",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compose Message: New Lead": {
+        "main": [
+          [
+            {
+              "node": "GHL: Send SMS",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compose Message: Repeat Customer": {
+        "main": [
+          [
+            {
+              "node": "GHL: Send SMS",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Send SMS": {
+        "main": [
+          [
+            {
+              "node": "Mark Texted (Update Dedup Store)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log Failure",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Mark Texted (Update Dedup Store)": {
+        "main": [
+          [
+            {
+              "node": "GHL: Find Opportunity",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Find Opportunity": {
+        "main": [
+          [
+            {
+              "node": "Opportunity Exists?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log: Pipeline Update Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Opportunity Exists?": {
+        "main": [
+          [
+            {
+              "node": "GHL: Move Stage to Auto-texted",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "GHL: Create Opportunity (Auto-texted)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Move Stage to Auto-texted": {
+        "main": [
+          [
+            {
+              "node": "End: Auto-texted Successfully",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log: Pipeline Update Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Create Opportunity (Auto-texted)": {
+        "main": [
+          [
+            {
+              "node": "End: Auto-texted Successfully",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log: Pipeline Update Failed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Failure": {
+        "main": [
+          [
+            {
+              "node": "GHL: Tag for Manual Follow-up",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "GHL: Tag for Manual Follow-up": {
+        "main": [
+          [
+            {
+              "node": "End: Manual Follow-up Needed",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "End: Manual Follow-up Needed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Sparsh Gupta",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-07T23:57:51.116Z",
+        "id": 33,
+        "workflowId": "IbCCqdqoGWhz1aHf",
+        "versionId": "e942f9ac-9170-4ee7-a24c-287a399401cc",
+        "event": "activated",
+        "userId": "083b1b27-85c2-42fa-9698-d04cc6962ef1"
+      },
+      {
+        "createdAt": "2026-07-07T23:57:51.112Z",
+        "id": 32,
+        "workflowId": "IbCCqdqoGWhz1aHf",
+        "versionId": "e942f9ac-9170-4ee7-a24c-287a399401cc",
+        "event": "deactivated",
+        "userId": "083b1b27-85c2-42fa-9698-d04cc6962ef1"
+      }
+    ]
+  }
+}
