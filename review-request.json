@@ -1,0 +1,604 @@
+{
+  "updatedAt": "2026-07-28T01:17:04.636Z",
+  "createdAt": "2026-07-28T01:14:45.884Z",
+  "id": "REPLACE_WITH_WORKFLOW_ID",
+  "name": "Review Request \u2014 Pressure Washing",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "Review_Request_Webhook",
+      "name": "Review Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "review-request-pressure-washing",
+        "responseMode": "onReceived",
+        "responseData": "success",
+        "options": {}
+      },
+      "webhookId": "c07db954-eb35-40e2-8896-dd9081c6898a"
+    },
+    {
+      "id": "Dedup_Check",
+      "name": "Dedup Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.reviewRequestedNumbers) staticData.reviewRequestedNumbers = {};\n\nconst phone = $json.body.phone || ($json.body.customData && $json.body.customData.phone) || ($json.body.contact && $json.body.contact.phone);\nconst name = $json.body.name || ($json.body.customData && $json.body.customData.name) || ($json.body.contact && ($json.body.contact.firstName || $json.body.contact.name)) || null;\nconst now = Date.now();\nconst thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;\nconst lastRequested = staticData.reviewRequestedNumbers[phone];\nconst isDuplicate = Boolean(lastRequested) && (now - lastRequested) < thirtyDaysMs;\n\nreturn [{\n  json: {\n    ...$json.body,\n    phone,\n    name,\n    isDuplicate,\n    lastRequestedAt: lastRequested || null\n  }\n}];"
+      }
+    },
+    {
+      "id": "Is_Duplicate_within_30d",
+      "name": "Is Duplicate? (within 30d)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -720,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{$json.isDuplicate}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Stopped_Duplicate_Within_30d",
+      "name": "Stopped: Duplicate Within 30d",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "GHL_Lookup_Contact",
+      "name": "GHL: Lookup Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -480,
+        -100
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://services.leadconnectorhq.com/contacts/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "locationId",
+              "value": "REPLACE_WITH_LOCATION_ID"
+            },
+            {
+              "name": "query",
+              "value": "={{$json.phone}}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Contact_Exists",
+      "name": "Contact Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -240,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "e1",
+              "leftValue": "={{$json.contacts?.length || 0}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Log_Contact_Not_Found",
+      "name": "Log: Contact Not Found (Unexpected)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "console.log('Review request fired for a phone number with no matching GHL contact - unexpected, job-complete trigger should only fire for existing customers:', JSON.stringify($json));\nreturn [{ json: { ...$json, contactNotFound: true } }];"
+      }
+    },
+    {
+      "id": "GHL_Tag_Contact_review_requested",
+      "name": "GHL: Tag Contact (review-requested)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        -80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + $json.contacts[0].id + '/tags' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tags: [\"review-requested\"] }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Compose_Message_Review_Request",
+      "name": "Compose Message: Review Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        -80
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "m1",
+              "name": "contactId",
+              "type": "string",
+              "value": "={{$(\"GHL: Lookup Contact\").item.json.contacts[0].id}}"
+            },
+            {
+              "id": "m2",
+              "name": "phone",
+              "type": "string",
+              "value": "={{$('Dedup Check').item.json.phone}}"
+            },
+            {
+              "id": "m3",
+              "name": "reviewRequested",
+              "type": "boolean",
+              "value": false
+            },
+            {
+              "id": "m4",
+              "name": "message",
+              "type": "string",
+              "value": "Hey! Thanks again for choosing [Business Name] for your recent job. If you have a minute, we'd really appreciate a quick review: [GOOGLE_REVIEW_LINK] \u2014 it helps us a lot. Reply STOP to opt out."
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "GHL_Send_SMS",
+      "name": "GHL: Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://services.leadconnectorhq.com/conversations/messages",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: \"SMS\", contactId: $json.contactId, message: $json.message }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "Mark_Requested_Update_Dedup_Store",
+      "name": "Mark Texted (Update Dedup Store)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData(\"global\");\nif (!staticData.reviewRequestedNumbers) staticData.reviewRequestedNumbers = {};\n\nlet phone, contactId;\ntry { phone = $(\"Compose Message: Review Request\").item.json.phone; contactId = $(\"Compose Message: Review Request\").item.json.contactId; } catch (e) {}\n\nstaticData.reviewRequestedNumbers[phone] = Date.now();\nreturn [{ json: { ...$json, phone, contactId, requestedAt: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "End_Auto-texted_Successfully",
+      "name": "End: Review Request Sent",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        -280
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Log_Failure",
+      "name": "Log Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.failureLog) staticData.failureLog = [];\nconst entry = { at: new Date().toISOString(), data: $json };\nstaticData.failureLog.push(entry);\nconsole.log('Review request FAILED, logging for manual follow-up:', JSON.stringify(entry));\nreturn [{ json: { ...$json, loggedForManualFollowUp: true } }];"
+      }
+    },
+    {
+      "id": "GHL_Tag_for_Manual_Follow-up",
+      "name": "GHL: Tag for Manual Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        720,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://services.leadconnectorhq.com/contacts/' + ($json.contactId || ($json.contacts && $json.contacts[0] && $json.contacts[0].id) || 'unknown') + '/tags' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ tags: [\"review-request-send-failed\"] }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Version",
+              "value": "2021-07-28"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_CREDENTIAL_ID",
+          "name": "GHL API (Yoda)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "End_Manual_Follow-up_Needed",
+      "name": "End: Manual Follow-up Needed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        960,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "Filter_Exact_Phone_Match",
+      "name": "Filter Exact Phone Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "// GHL's contacts \"query\" param does not reliably filter server-side (observed returning all contacts regardless of query) - filter client-side for an exact match instead of trusting the API's filtering.\nconst targetPhone = $('Dedup Check').item.json.phone;\nconst all = $json.contacts || [];\nconst matches = all.filter(c => c.phone === targetPhone);\nreturn [{ json: { ...$json, contacts: matches } }];"
+      }
+    },
+    {
+      "id": "Wait_7_Days",
+      "name": "Wait 7 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1080,
+        0
+      ],
+      "parameters": {
+        "amount": 7,
+        "unit": "days"
+      },
+      "webhookId": "review-request-wait-7d"
+    }
+  ],
+  "connections": {
+    "Dedup Check": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate? (within 30d)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Lookup Contact": {
+      "main": [
+        [
+          {
+            "node": "Filter Exact Phone Match",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact Found?": {
+      "main": [
+        [
+          {
+            "node": "GHL: Tag Contact (review-requested)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Contact Not Found (Unexpected)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log: Contact Not Found (Unexpected)": {
+      "main": [
+        [
+          {
+            "node": "End: Review Request Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Tag Contact (review-requested)": {
+      "main": [
+        [
+          {
+            "node": "Compose Message: Review Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Message: Review Request": {
+      "main": [
+        [
+          {
+            "node": "GHL: Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Mark Texted (Update Dedup Store)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Texted (Update Dedup Store)": {
+      "main": [
+        [
+          {
+            "node": "End: Review Request Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Failure": {
+      "main": [
+        [
+          {
+            "node": "GHL: Tag for Manual Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GHL: Tag for Manual Follow-up": {
+      "main": [
+        [
+          {
+            "node": "End: Manual Follow-up Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Exact Phone Match": {
+      "main": [
+        [
+          {
+            "node": "Contact Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Wait 7 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 7 Days": {
+      "main": [
+        [
+          {
+            "node": "Dedup Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate? (within 30d)": {
+      "main": [
+        [
+          {
+            "node": "Stopped: Duplicate Within 30d",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GHL: Lookup Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": {},
+  "pinData": null,
+  "triggerCount": 1,
+  "tags": []
+}
